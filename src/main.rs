@@ -1,6 +1,8 @@
-#![allow(dead_code, unused_variables)]
+#![allow(dead_code, unused_variables, unused_imports)]
 
-use std::{io, env, future::Future};
+use core::panic;
+use std::fmt::write;
+use std::{io, future::Future, fmt};
 use tokio;
 use tokio::time::{sleep, Duration};
 
@@ -29,7 +31,7 @@ impl Command {
 #[tokio::main]
 async fn main() {
     let stdin = io::stdin();
-    let mut input = String::new();
+    let mut input;
     loop {
         input = "".to_string();
         stdin.read_line(&mut input).unwrap();
@@ -42,13 +44,19 @@ async fn main() {
                 Command::Exit => 
                     break,
                 Command::ReadFromFile => 
-                    tokio::spawn(read_from_file("./base/file.txt".into())),
+                    tokio::spawn(read_from_file(
+                        Path::new("./base/file.txt".to_string()).unwrap())
+                    ),
                 Command::Sleep =>
                     tokio::spawn(sleeper(5, input)),
                 Command::CreateFile =>
-                    tokio::spawn(create_file("./base/sub/created.txt".into())),
+                    tokio::spawn(create_file(
+                        Path::new("./base/sub/created.txt".to_string()).unwrap())
+                    ),
                 Command::CreateDir =>
-                    tokio::spawn(create_dir("./base/sub".into())),
+                    tokio::spawn(create_dir(
+                        Path::new("./base/sub".to_string()).unwrap())
+                    ),
             };
         } else {
             println!("Invalid input.");
@@ -63,9 +71,10 @@ async fn sleeper(secs: u64, name: String) {
     println!("{} slept {} secs", name, secs);
 }
 
-async fn read_from_file(path: String) {
+async fn read_from_file(path: Path) {
     println!("Read file {}", path);
-    let read_result = tokio::fs::read_to_string(path.clone()).await;
+    let read_result
+        = tokio::fs::read_to_string(path.to_string()).await;
     match read_result {
         Ok(file_content) => {
             println!("Reading file {} done. Content: {}", path, file_content);
@@ -76,26 +85,58 @@ async fn read_from_file(path: String) {
     };
 }
 
-async fn create_file(path: String) {
+async fn create_file(path: Path) {
     println!("Create file {}", path);
-    let create_result = tokio::fs::File::create(path.clone()).await;
+    match  tokio::fs::try_exists(path.to_string()).await {
+        Ok(true) => {},
+        _ => {create_dir(path.parent()).await;},
+    };
+    let create_result = tokio::fs::File::create(path.to_string()).await;
     match create_result {
         Ok(file) => println!("File created {}", path),
         Err(e) => println!("An error occured during creating file {}. Error: {}", path, e),
     };
 }
 
-fn create_dir(path: String) -> impl Future<Output = ()> {
-    async move {
-        println!("Create dir {}", path);
-        let create_result = tokio::fs::create_dir(path.clone()).await;
-        match create_result {
-            Ok(file) => println!("Dir created {}", path),
-            Err(e) => println!("An error occured during creating dir {}. Error: {}", path, e),
-        };
+async fn create_dir(path: Path) {
+    println!("Create dir {}", path);
+    let create_result
+        = tokio::fs::create_dir_all(path.to_string()).await;
+    match create_result {
+        Ok(file) => println!("Dir created {}", path),
+        Err(e) => println!("An error occured during creating dir {}. Error: {}", path, e),
+    };
+}
+
+struct Path{
+    p: String,
+}
+
+impl Path {
+    fn new(p: String) -> Option<Self> {
+        if p.starts_with("./base/") || &p=="./base" {
+            Some(Path{ p })
+        } else {
+            None
+        }
+    }
+
+    fn is_base(&self) -> bool {
+        self.p == "./base"
+    }
+
+    fn parent(&self) -> Path {
+        if !self.is_base() {
+            let v: Vec<&str> = self.p.split('/').collect();
+            Path{ p: v[0..v.len()-1].join("/") }
+        } else {
+            Path{p: "./base".to_string()}
+        }
     }
 }
 
-async fn wait_for_path_to_exist(path: String) {
-
+impl fmt::Display for Path {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        write!(f, "{}", self.p)
+    }
 }
