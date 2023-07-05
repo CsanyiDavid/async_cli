@@ -4,6 +4,24 @@ use std::{io, env};
 use tokio;
 use tokio::time::{sleep, Duration};
 
+#[derive(Debug)]
+enum Command{
+    Exit,
+    ReadFromFile,
+    Sleep,
+}
+
+impl Command {
+    fn from_str(s: &str) -> Result<Command, ()> {
+        match s {
+            "exit" => Ok(Command::Exit),
+            "readfromfile" => Ok(Command::ReadFromFile),
+            "sleep" => Ok(Command::Sleep),
+            _ => Err(()),
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let stdin = io::stdin();
@@ -14,9 +32,19 @@ async fn main() {
         if input.ends_with('\n') {
             input.truncate(input.len()-1);
         }
-        println!("input {} ", input);
-        tokio::spawn(sleeper(5, input));
-        tokio::spawn(read_from_file("./file.txt".into()));
+        if let Ok(command) = Command::from_str(&input) {
+            println!("input {:?} ", command);
+            match command {
+                Command::Exit => 
+                    break,
+                Command::ReadFromFile => 
+                    tokio::spawn(read_from_file("./file.txt".into())),
+                Command::Sleep =>
+                    tokio::spawn(sleeper(5, input)),
+            };
+        } else {
+            println!("Invalid input.");
+        };
     }
 
 }
