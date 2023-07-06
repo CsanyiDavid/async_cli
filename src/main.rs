@@ -1,21 +1,21 @@
 #![allow(dead_code, unused_variables, unused_imports)]
 
 use core::panic;
-use std::{io, future::Future, path::Path, fmt, str::FromStr};
+use std::{io, future::Future, path::PathBuf, fmt, str::FromStr, cell::RefCell};
 use tokio;
 use tokio::time::{sleep, Duration};
 
 #[derive(Debug)]
-enum Command{
+enum Command {
     Exit,
-    Sleep,
-    ReadFromFile,
-    CreateFile,
-    CreateDir,
+    Sleep(u64),
+    ReadFromFile(PathBuf),
+    CreateFile(PathBuf),
+    CreateDir(PathBuf),
 }
 
 #[derive(Debug)]
-struct ParseError;
+struct ParseError();
 
 impl FromStr for Command {
     type Err = ParseError;
@@ -24,11 +24,38 @@ impl FromStr for Command {
         let parts_of_s: Vec<&str> = s.split(' ').collect();
         match parts_of_s[0] {
             "exit" => Ok(Command::Exit),
-            "sleep" => Ok(Command::Sleep),
-            "readfromfile" => Ok(Command::ReadFromFile),
-            "createfile" => Ok(Command::CreateFile),
-            "createdir" => Ok(Command::CreateDir),
-            _ => Err(ParseError),
+            "sleep" => {
+                if parts_of_s.len() != 2 {
+                    return Err(ParseError())
+                }
+                let seconds_result = parts_of_s[1].parse::<u64>();
+                match seconds_result {
+                    Ok(seconds) => Ok(Command::Sleep(seconds)),
+                    Err(error) => Err(ParseError()),
+                }
+            }
+            "readfromfile" => {
+                if parts_of_s.len() != 2 {
+                    return Err(ParseError())
+                }
+                let path = PathBuf::from(parts_of_s[1]);
+                Ok(Command::ReadFromFile(path))
+            }
+            "createfile" => {
+                if parts_of_s.len() != 2 {
+                    return Err(ParseError())
+                }
+                let path = PathBuf::from(parts_of_s[1]);
+                Ok(Command::CreateFile(path))
+            }
+            "createdir" => {
+                if parts_of_s.len() != 2 {
+                    return Err(ParseError())
+                }
+                let path = PathBuf::from(parts_of_s[1]);
+                Ok(Command::CreateDir(path))
+            },
+            _ => Err(ParseError()),
         }
     }
 }
@@ -48,20 +75,14 @@ async fn main() {
             match command {
                 Command::Exit => 
                     break,
-                Command::ReadFromFile => 
-                    tokio::spawn(read_from_file(
-                        Path::new("./base/file.txt")
-                    )),
-                Command::Sleep =>
-                    tokio::spawn(sleeper(5, input)),
-                Command::CreateFile =>
-                    tokio::spawn(create_file(
-                        Path::new("./base/sub/created.txt")
-                    )),
-                Command::CreateDir =>
-                    tokio::spawn(create_dir(
-                        Path::new("./base/sub")
-                    )),
+                Command::Sleep(seconds) =>
+                    tokio::spawn(sleeper(seconds)),
+                Command::ReadFromFile(path) => 
+                    tokio::spawn(read_from_file(path)),
+                Command::CreateFile(path) =>
+                    tokio::spawn(create_file(path)),
+                Command::CreateDir(path) =>
+                    tokio::spawn(create_dir(path)),
             };
         } else {
             println!("Invalid input.");
@@ -70,16 +91,16 @@ async fn main() {
 
 }
 
-async fn sleeper(secs: u64, name: String) {
-    println!("{} sleeper started with {} secs", name, secs);
-    sleep(Duration::from_secs(secs)).await;
-    println!("{} slept {} secs", name, secs);
+async fn sleeper(seconds: u64) {
+    println!("sleeper started with {} seconds", seconds);
+    sleep(Duration::from_secs(seconds)).await;
+    println!("slept {} seconds", seconds);
 }
 
-async fn read_from_file(path: &Path) {
+async fn read_from_file(path: PathBuf) {
     println!("Read file {:?}", path);
     let read_result
-        = tokio::fs::read_to_string(path).await;
+        = tokio::fs::read_to_string(path.clone()).await;
     match read_result {
         Ok(file_content) => {
             println!("Reading file {:?} done. Content: {}", path, file_content);
@@ -90,26 +111,26 @@ async fn read_from_file(path: &Path) {
     };
 }
 
-async fn create_file(path: &Path) {
+async fn create_file(path: PathBuf) {
     println!("Create file {:?}", path);
-    match  tokio::fs::try_exists(path).await {
+    match  tokio::fs::try_exists(path.clone()).await {
         Ok(true) => {},
         _ => {
             let parent_dir = path.parent().unwrap();
-            create_dir(parent_dir).await;
+            create_dir(PathBuf::from(parent_dir)).await;
         },
     };
-    let create_result = tokio::fs::File::create(path).await;
+    let create_result = tokio::fs::File::create(path.clone()).await;
     match create_result {
         Ok(file) => println!("File created {:?}", path),
         Err(e) => println!("An error occured during creating file {:?}. Error: {}", path, e),
     };
 }
 
-async fn create_dir(path: &Path) {
+async fn create_dir(path: PathBuf) {
     println!("Create dir {:?}", path);
     let create_result
-        = tokio::fs::create_dir_all(path).await;
+        = tokio::fs::create_dir_all(path.clone()).await;
     match create_result {
         Ok(file) => println!("Dir created {:?}", path),
         Err(e) => println!("An error occured during creating dir {:?}. Error: {}", path, e),
