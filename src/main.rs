@@ -1,7 +1,4 @@
-#![allow(dead_code, unused_variables, unused_imports)]
-
-use core::panic;
-use std::{io, future::Future, path::PathBuf, fmt, str::FromStr, cell::RefCell};
+use std::{io, path::PathBuf, str::FromStr};
 use tokio;
 use tokio::time::{sleep, Duration};
 
@@ -31,7 +28,7 @@ impl FromStr for Command {
                 let seconds_result = parts_of_s[1].parse::<u64>();
                 match seconds_result {
                     Ok(seconds) => Ok(Command::Sleep(seconds)),
-                    Err(error) => Err(ParseError()),
+                    Err(_) => Err(ParseError()),
                 }
             }
             "readfromfile" => {
@@ -122,7 +119,7 @@ async fn create_file(path: PathBuf) {
     };
     let create_result = tokio::fs::File::create(path.clone()).await;
     match create_result {
-        Ok(file) => println!("File created {:?}", path),
+        Ok(_) => println!("File created {:?}", path),
         Err(e) => println!("An error occured during creating file {:?}. Error: {}", path, e),
     };
 }
@@ -132,7 +129,7 @@ async fn create_dir(path: PathBuf) {
     let create_result
         = tokio::fs::create_dir_all(path.clone()).await;
     match create_result {
-        Ok(file) => println!("Dir created {:?}", path),
+        Ok(_) => println!("Dir created {:?}", path),
         Err(e) => println!("An error occured during creating dir {:?}. Error: {}", path, e),
     };
 }
