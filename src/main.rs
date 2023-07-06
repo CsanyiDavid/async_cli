@@ -1,8 +1,7 @@
 #![allow(dead_code, unused_variables, unused_imports)]
 
 use core::panic;
-use std::fmt::write;
-use std::{io, future::Future, path::Path, fmt};
+use std::{io, future::Future, path::Path, fmt, str::FromStr};
 use tokio;
 use tokio::time::{sleep, Duration};
 
@@ -15,15 +14,21 @@ enum Command{
     CreateDir,
 }
 
-impl Command {
-    fn from_str(s: &str) -> Result<Command, ()> {
-        match s {
+#[derive(Debug)]
+struct ParseError;
+
+impl FromStr for Command {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts_of_s: Vec<&str> = s.split(' ').collect();
+        match parts_of_s[0] {
             "exit" => Ok(Command::Exit),
-            "readfromfile" => Ok(Command::ReadFromFile),
             "sleep" => Ok(Command::Sleep),
+            "readfromfile" => Ok(Command::ReadFromFile),
             "createfile" => Ok(Command::CreateFile),
             "createdir" => Ok(Command::CreateDir),
-            _ => Err(()),
+            _ => Err(ParseError),
         }
     }
 }
@@ -38,7 +43,7 @@ async fn main() {
         if input.ends_with('\n') {
             input.truncate(input.len()-1);
         }
-        if let Ok(command) = Command::from_str(&input) {
+        if let Ok(command) = input.parse() {
             println!("input {:?} ", command);
             match command {
                 Command::Exit => 
