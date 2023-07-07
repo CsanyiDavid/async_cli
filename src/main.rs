@@ -6,6 +6,7 @@ use tokio::time::{sleep, Duration};
 enum Command {
     Exit,
     Sleep(u64),
+    Count(u64),
     ReadFromFile(PathBuf),
     CreateFile(PathBuf),
     CreateDir(PathBuf),
@@ -28,6 +29,16 @@ impl FromStr for Command {
                 let seconds_result = parts_of_s[1].parse::<u64>();
                 match seconds_result {
                     Ok(seconds) => Ok(Command::Sleep(seconds)),
+                    Err(_) => Err(ParseError()),
+                }
+            }
+            "count" => {
+                if parts_of_s.len() != 2 {
+                    return Err(ParseError())
+                }
+                let cnt_result = parts_of_s[1].parse::<u64>();
+                match cnt_result {
+                    Ok(cnt) => Ok(Command::Count(cnt)),
                     Err(_) => Err(ParseError()),
                 }
             }
@@ -74,6 +85,8 @@ async fn main() {
                     break,
                 Command::Sleep(seconds) =>
                     tokio::spawn(sleeper(seconds)),
+                Command::Count(cnt) =>
+                    tokio::spawn(counter(cnt)),
                 Command::ReadFromFile(path) => 
                     tokio::spawn(read_from_file(path)),
                 Command::CreateFile(path) =>
@@ -92,6 +105,13 @@ async fn sleeper(seconds: u64) {
     println!("sleeper started with {} seconds", seconds);
     sleep(Duration::from_secs(seconds)).await;
     println!("slept {} seconds", seconds);
+}
+
+async fn counter(cnt: u64) {
+    for i in 0..cnt+1 {
+        println!("count {}", i);
+        sleep(Duration::from_secs(1)).await;
+    }
 }
 
 async fn read_from_file(path: PathBuf) {
