@@ -1,5 +1,6 @@
-use std::{io, path::PathBuf, str::FromStr};
+use std::{path::PathBuf, str, str::FromStr};
 use tokio;
+use tokio::io::AsyncReadExt;
 use tokio::time::{sleep, Duration};
 
 #[derive(Debug)]
@@ -68,18 +69,15 @@ impl FromStr for Command {
     }
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() {
-    let stdin = io::stdin();
-    let mut input;
     loop {
-        input = "".to_string();
-        stdin.read_line(&mut input).unwrap();
-        if input.ends_with('\n') {
+        let input = read().await;
+        /*if input.ends_with('\n') {
             input.truncate(input.len()-1);
-        }
+        }*/
         if let Ok(command) = input.parse() {
-            println!("input {:?} ", command);
+            println!("Input command: {:?} ", command);
             match command {
                 Command::Exit => 
                     break,
@@ -101,10 +99,23 @@ async fn main() {
 
 }
 
+async fn read() -> String {
+    println!("Reading started..");
+    let mut stdin = tokio::io::stdin();
+    let mut buffer = [0;50];
+    let n = stdin.read(&mut buffer[..]).await.unwrap();
+    let s = match str::from_utf8(&buffer[..n-1]) {
+        Ok(v) => v,
+        Err(e) => panic!("Invalid UTF-8 sequence: {}", e),
+    };
+    println!("Read {}.", s);
+    s.into()
+}
+
 async fn sleeper(seconds: u64) {
-    println!("sleeper started with {} seconds", seconds);
+    println!("Sleeper started with {} seconds.", seconds);
     sleep(Duration::from_secs(seconds)).await;
-    println!("slept {} seconds", seconds);
+    println!("Slept {} seconds.", seconds);
 }
 
 async fn counter(cnt: u64) {
