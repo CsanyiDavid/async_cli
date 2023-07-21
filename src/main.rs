@@ -71,6 +71,7 @@ impl FromStr for Command {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
+    let mut task_handles = Vec::<tokio::task::JoinHandle<()>>::new();
     loop {
         let input = read().await;
         /*if input.ends_with('\n') {
@@ -78,7 +79,7 @@ async fn main() {
         }*/
         if let Ok(command) = input.parse() {
             println!("Input command: {:?} ", command);
-            match command {
+            let handle = match command {
                 Command::Exit => 
                     break,
                 Command::Sleep(seconds) =>
@@ -92,10 +93,19 @@ async fn main() {
                 Command::CreateDir(path) =>
                     tokio::spawn(create_dir(path)),
             };
+            task_handles.push(handle);
         } else {
             println!("Invalid input.");
         };
     }
+    println!("Waiting for running tasks...");
+    for handle in task_handles {
+        match handle.await {
+            Ok(_) => {},
+            Err(e) => println!("Error {e}")
+        };
+    }
+    println!("All tasks done. Exit");
 
 }
 
