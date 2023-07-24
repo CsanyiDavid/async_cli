@@ -1,3 +1,4 @@
+use std::future::Future;
 use std::{path::PathBuf, str, str::FromStr};
 use tokio;
 use tokio::io::AsyncReadExt;
@@ -74,9 +75,6 @@ async fn main() {
     let mut task_handles = Vec::<tokio::task::JoinHandle<()>>::new();
     loop {
         let input = read().await;
-        /*if input.ends_with('\n') {
-            input.truncate(input.len()-1);
-        }*/
         if let Ok(command) = input.parse() {
             println!("Input command: {:?} ", command);
             let handle = match command {
@@ -86,12 +84,12 @@ async fn main() {
                     tokio::spawn(sleeper(seconds)),
                 Command::Count(cnt) =>
                     tokio::spawn(counter(cnt)),
-                Command::ReadFromFile(path) => 
-                    tokio::spawn(read_from_file(path)),
+                Command::ReadFromFile(path) =>
+                    tokio::spawn(spawn(||{read_from_file(path)})),
                 Command::CreateFile(path) =>
-                    tokio::spawn(create_file(path)),
+                    tokio::spawn(spawn(||{create_file(path)})),
                 Command::CreateDir(path) =>
-                    tokio::spawn(create_dir(path)),
+                    tokio::spawn(spawn(||{create_dir(path)})),
             };
             task_handles.push(handle);
         } else {
@@ -135,42 +133,38 @@ async fn counter(cnt: u64) {
     }
 }
 
-async fn read_from_file(path: PathBuf) {
+async fn read_from_file(path: PathBuf) -> anyhow::Result<String>{
     println!("Read file {:?}", path);
-    let read_result
-        = tokio::fs::read_to_string(path.clone()).await;
-    match read_result {
-        Ok(file_content) => {
-            println!("Reading file {:?} done. Content: {}", path, file_content);
-        }
-        Err(e) => {
-            println!("An error occured during reading file {:?}. Error: {}", path, e);
-        }
-    };
+    let file_content= tokio::fs::read_to_string(path.clone()).await?;
+    Ok(file_content)
 }
 
-async fn create_file(path: PathBuf) {
+async fn create_file(path: PathBuf) -> anyhow::Result<String> {
     println!("Create file {:?}", path);
     match  tokio::fs::try_exists(path.clone()).await {
         Ok(true) => {},
         _ => {
             let parent_dir = path.parent().unwrap();
-            create_dir(PathBuf::from(parent_dir)).await;
+            spawn(||{create_dir(PathBuf::from(parent_dir))}).await;
         },
     };
-    let create_result = tokio::fs::File::create(path.clone()).await;
-    match create_result {
-        Ok(_) => println!("File created {:?}", path),
-        Err(e) => println!("An error occured during creating file {:?}. Error: {}", path, e),
-    };
+    tokio::fs::File::create(path.clone()).await?;
+    Ok(format!("File created {:?}", path))
 }
 
-async fn create_dir(path: PathBuf) {
+async fn create_dir(path: PathBuf) -> anyhow::Result<String> {
     println!("Create dir {:?}", path);
-    let create_result
-        = tokio::fs::create_dir_all(path.clone()).await;
-    match create_result {
-        Ok(_) => println!("Dir created {:?}", path),
-        Err(e) => println!("An error occured during creating dir {:?}. Error: {}", path, e),
+    tokio::fs::create_dir_all(path.clone()).await?;
+    Ok(format!("Dir created {:?}", path))
+}
+
+async fn spawn<F, R>(f: F) where 
+    F: FnOnce() -> R,
+    R: Future<Output = anyhow::Result<String>>
+{
+    let handle = f();
+    match handle.await {
+        Ok(message) => println!("Ok {}", message),
+        Err(error) => println!("{}", error),
     };
 }
